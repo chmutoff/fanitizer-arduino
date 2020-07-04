@@ -6,14 +6,14 @@
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET    -1  // Reset pin # (or -1 if sharing Arduino reset pin)
 
 #define MIN_DUTY 150      // Minimal speed when fan starts to spin
 #define MAX_DUTY 1024     // Limit maximum fan speed
 #define DIF_DUTY 1.10     // Difference between input and exhaust fan PWM signals (Allows to create positive pressure)
 
 #define FAN_IN_PIN D6     // Intake fan PWM pin
-#define FAN_OUT_PIN D7    // Exhaust fan PWM pin
+#define FAN_EX_PIN D7     // Exhaust fan PWM pin
 #define DHP_POWER_PIN D0  // VCC pin of DHT sensor (used to reboot the sensor)
 #define DHT_DATA_PIN D3   // DHT sensor data pin
 
@@ -27,9 +27,9 @@ float temperature;        // Temperature read from sensor
 float humidity;           // Humidity read from sensor
 
 int fan_in_duty;          // Intake fan duty cycle value
-int fan_out_duty;         // Exhaust fan duty cycle value
+int fan_ex_duty;          // Exhaust fan duty cycle value
 int fan_in_load;          // Intake fan speed percentage
-int fan_out_load;         // Exhaust fan speed percentage
+int fan_ex_load;          // Exhaust fan speed percentage
 
 void setup() {
     Serial.begin(115200);
@@ -43,7 +43,7 @@ void setup() {
     // Initialize PWM settings
     analogWriteFreq(25000); // 25KHz
     pinMode(FAN_IN_PIN, OUTPUT);
-    pinMode(FAN_OUT_PIN, OUTPUT);    
+    pinMode(FAN_EX_PIN, OUTPUT);    
 
     // Initialize display
     // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -68,11 +68,11 @@ void loop() {
     if (!isnan(temperature)) {
       bad_reads = 0;
       fan_in_duty = map(temperature*100, MIN_TEMP*100, MAX_TEMP*100, MIN_DUTY, MAX_DUTY);
-      fan_out_duty = map(temperature*100, MIN_TEMP*100, MAX_TEMP*100, MIN_DUTY, MAX_DUTY);
+      fan_ex_duty = map(temperature*100, MIN_TEMP*100, MAX_TEMP*100, MIN_DUTY, MAX_DUTY);
       fan_in_load = (fan_in_duty  * 100 / MAX_DUTY);
-      fan_out_load = (fan_out_duty  * 100 / MAX_DUTY) / DIF_DUTY;
+      fan_ex_load = (fan_ex_duty  * 100 / MAX_DUTY) / DIF_DUTY;
       analogWrite(FAN_IN_PIN, fan_in_duty);
-      analogWrite(FAN_OUT_PIN, fan_out_duty);
+      analogWrite(FAN_EX_PIN, fan_ex_duty);
     } else {
       bad_reads++;
       if (bad_reads > 5) {
@@ -104,11 +104,11 @@ void displayInfo() {
     display.println(buffer);
   
     display.setCursor(0, 33);
-    sprintf(buffer, "F.IN %i", fan_in_load);
+    sprintf(buffer, "IN %i", fan_in_load);
     display.println(buffer);
   
     display.setCursor(0, 49);
-    sprintf(buffer, "F.OUT %i", fan_out_load);
+    sprintf(buffer, "EX %i", fan_ex_load);
     display.println(buffer);
       
     display.display();
