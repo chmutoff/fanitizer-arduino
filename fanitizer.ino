@@ -2,7 +2,8 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "DHTesp.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -14,31 +15,23 @@
 
 #define FAN_IN_PIN D6     // Intake fan PWM pin
 #define FAN_EX_PIN D7     // Exhaust fan PWM pin
-#define DHP_POWER_PIN D0  // VCC pin of DHT sensor (used to reboot the sensor)
-#define DHT_DATA_PIN D3   // DHT sensor data pin
 
 #define MIN_TEMP 25       // Temperature that triggers fan power on
 #define MAX_TEMP 35       // Temperature that triggers max fan power
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-DHTesp dht;
-int bad_reads;            // Counter for bad reads (nan result) from DHT sensor
+Adafruit_BME280 bme;
 float temperature;        // Temperature read from sensor
 float humidity;           // Humidity read from sensor
 
 int fan_in_duty;          // Intake fan duty cycle value
 int fan_ex_duty;          // Exhaust fan duty cycle value
-int fan_in_load;          // Intake fan speed percentage
-int fan_ex_load;          // Exhaust fan speed percentage
 
 void setup() {
     Serial.begin(115200);
 
-    // Initialize DHT sensor
-    pinMode(DHP_POWER_PIN, OUTPUT);
-    digitalWrite(DHP_POWER_PIN, HIGH);
-    dht.setup(DHT_DATA_PIN, DHTesp::AM2302);
-    bad_reads = 0;
+    // Initialize temperature sensor
+    bme.begin(0x76);
 
     // Initialize PWM settings
     analogWriteFreq(25000); // 25KHz
@@ -58,34 +51,23 @@ void setup() {
 void(* resetFunc) (void) = 0;
  
 void loop() {
-
-    temperature = dht.getTemperature();  
-    humidity = dht.getHumidity();      
+    temperature = bme.readTemperature();
+    humidity = bme.readHumidity();
+    
     char buffer[50];
     sprintf(buffer, "Temperature: %.2fC, Humidity: %.2f", temperature, humidity);
     Serial.println(buffer);
 
     if (!isnan(temperature)) {
-      bad_reads = 0;
       fan_in_duty = map(temperature*100, MIN_TEMP*100, MAX_TEMP*100, MIN_DUTY, MAX_DUTY);
       fan_ex_duty = map(temperature*100, MIN_TEMP*100, MAX_TEMP*100, MIN_DUTY, MAX_DUTY);
-      fan_in_load = (fan_in_duty  * 100 / MAX_DUTY);
-      fan_ex_load = (fan_ex_duty  * 100 / MAX_DUTY) / DIF_DUTY;
       analogWrite(FAN_IN_PIN, fan_in_duty);
-      analogWrite(FAN_EX_PIN, fan_ex_duty);
+      analogWrite(FAN_EX_PIN, fan_ex_duty); // TODO: make this fan slower!!!
     } else {
-      bad_reads++;
-      if (bad_reads > 5) {
-        Serial.println("Resetting DHT");
-        digitalWrite(DHP_POWER_PIN, LOW);
-        delay(2000);
-        digitalWrite(DHP_POWER_PIN, HIGH);
-        bad_reads = 0;
-      }
+   
     }
 
     displayInfo();
-
     delay(5000);
 }
 
@@ -95,6 +77,8 @@ void displayInfo() {
     display.setTextColor(SSD1306_WHITE);
 
     char buffer[10];
+    int fan_in_load = (fan_in_duty  * 100 / MAX_DUTY);                     // Intake fan speed percentage
+    int fan_ex_load = (fan_ex_duty  * 100 / MAX_DUTY) / DIF_DUTY;          // Exhaust fan speed percentage
     
     display.setCursor(0, 0);
     display.println("Fanitizer");
