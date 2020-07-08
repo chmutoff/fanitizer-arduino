@@ -8,7 +8,7 @@
 #include <ArduinoOTA.h>
 #include "config.h"
 #include "ESP8266WiFi.h"
-#include "ota.hpp"
+#include "OTA.hpp"
 #include "TimerObject.h"
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -20,32 +20,33 @@ float humidity;           // Humidity read from sensor
 
 int fan_in_duty;          // Intake fan duty cycle value
 int fan_ex_duty;          // Exhaust fan duty cycle value
-
 volatile int inPulses;    // Intake fan counter of tacho pulses
 volatile int exPulses;    // Exhaust fan counter of tacho pulses
 int fanInRPM;             // Intake fan calculated RPM
 int fanExRPM;             // Exhaust fan calculated RPM
-unsigned long lastInRPMmillis = 0;  // Last time we counted In fan RPM
-unsigned long lastExRPMmillis = 0;  // Last time we counted Ex fan RPM
 
 TimerObject *environmentTimer = new TimerObject(5000);
 TimerObject *rpmTimer = new TimerObject(1000);          // RPM MUST be calculated every second!
 TimerObject *displayTimer = new TimerObject(5500);
 TimerObject *influxTimer = new TimerObject(10000);
 
+// IN tacho pulse counter
 ICACHE_RAM_ATTR void countInPulse() {
   inPulses++;
 }
 
+// EX tacho pulse counter
 ICACHE_RAM_ATTR void countExPulse() {
   exPulses++;
 }
 
+// Updates RPM values
 void calculateRPM() {
   fanInRPM = getRPM(inPulses);
   fanExRPM = getRPM(exPulses);
 }
 
+// Converts pulses to RPM. MUST be called once every second!
 int getRPM(volatile int &pulses) {
   int RPM;
   noInterrupts();
@@ -95,9 +96,6 @@ void setup() {
   showSplashScreen();
   connectToWiFi(); // TODO: possible check if we are connected before sending data so we don't stuck with bad wifi
 }
-
-// Reboot device
-void(* resetFunc) (void) = 0;
 
 void loop() {
   ArduinoOTA.handle();
@@ -153,7 +151,7 @@ void displayInfo() {
 }
 
 void sendToInfluxdb() {
-  String line = String("environment,host=" + nodeName + " temperature=" + String(temperature) + ",humidity=" + String(humidity) + ",inRPM=" + String(fanInRPM) + ",exRPM=" + String(fanExRPM));
+  String line = String("environment,host=" + String(nodeName) + " temperature=" + String(temperature) + ",humidity=" + String(humidity) + ",inRPM=" + String(fanInRPM) + ",exRPM=" + String(fanExRPM));
 
   Serial.print("Sending line: ");
   Serial.println(line);
@@ -172,13 +170,14 @@ void connectToWiFi() {
     delay(500);
   }
 
-  Serial.println("Connected to network");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
 
   long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
+  Serial.print("Signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
 }
@@ -199,22 +198,3 @@ void showSplashScreen() {
     delay(100);
   }
 }
-
-// Tests the fan from min duty cycle to max duty cycle and backwards
-/*
-  void testFanPwm() {
-    for(int dutyCycle = MIN_DUTY; dutyCycle < MAX_DUTY; dutyCycle+=10){
-      Serial.print("dutyCycle: ");
-      Serial.println(dutyCycle);
-      analogWrite(FAN_IN_PIN, dutyCycle);
-      delay(1000);
-    }
-
-    for(int dutyCycle = MAX_DUTY; dutyCycle > MIN_DUTY; dutyCycle-=10){
-      Serial.print("dutyCycle: ");
-      Serial.println(dutyCycle);
-      analogWrite(FAN_IN_PIN, dutyCycle);
-      delay(1000);
-    }
-  }
-*/
