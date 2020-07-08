@@ -9,6 +9,7 @@
 #include "config.h"
 #include "ESP8266WiFi.h"
 #include "ota.hpp"
+#include "TimerObject.h"
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_BME280 bme;
@@ -27,6 +28,11 @@ int fanExRPM;             // Exhaust fan calculated RPM
 unsigned long lastInRPMmillis = 0;  // Last time we counted In fan RPM
 unsigned long lastExRPMmillis = 0;  // Last time we counted Ex fan RPM
 
+TimerObject *environmentTimer = new TimerObject(5000);
+TimerObject *rpmTimer = new TimerObject(1000);          // RPM MUST be calculated every second!
+TimerObject *displayTimer = new TimerObject(5500);
+TimerObject *influxTimer = new TimerObject(10000);
+
 ICACHE_RAM_ATTR void countInPulse() {
   inPulses++;
 }
@@ -35,14 +41,15 @@ ICACHE_RAM_ATTR void countExPulse() {
   exPulses++;
 }
 
-int calculateRPM(unsigned long &lastRPMmillis, volatile int &pulses) {
+void calculateRPM() {
+  fanInRPM = getRPM(inPulses);
+  fanExRPM = getRPM(exPulses);
+}
+
+int getRPM(volatile int &pulses) {
   int RPM;
   noInterrupts();
-  int elapsedMS = (millis() - lastRPMmillis) / 1000;
-  int revolutions = pulses / 2;
-  int revPerMS = revolutions / elapsedMS;
-  RPM = revPerMS * 60;
-  lastRPMmillis = millis();
+  RPM = (pulses / 2) * 60;
   pulses = 0;
   interrupts();
   return RPM;
@@ -73,6 +80,18 @@ void setup() {
 
   InitOTA();
 
+  environmentTimer->setOnTimer(&adjustPWM);
+  environmentTimer->Start();
+
+  rpmTimer->setOnTimer(&calculateRPM);
+  rpmTimer->Start();
+
+  displayTimer->setOnTimer(&displayInfo);
+  displayTimer->Start();
+
+  influxTimer->setOnTimer(&sendToInfluxdb);
+  influxTimer->Start();
+
   showSplashScreen();
   connectToWiFi(); // TODO: possible check if we are connected before sending data so we don't stuck with bad wifi
 }
@@ -82,24 +101,25 @@ void(* resetFunc) (void) = 0;
 
 void loop() {
   ArduinoOTA.handle();
-  
+  environmentTimer->Update();
+  rpmTimer->Update();
+  displayTimer->Update();
+  influxTimer->Update();
+}
+
+void adjustPWM() {
   temperature = bme.readTemperature();
   humidity = bme.readHumidity();
 
   if (!isnan(temperature)) {
     fan_in_duty = map(temperature * 100, MIN_TEMP * 100, MAX_TEMP * 100, MIN_DUTY, MAX_DUTY);
+    fan_in_duty = constrain(fan_in_duty, MIN_DUTY, MAX_DUTY); // Make sure that we are not going under or over max duty cycle value
     fan_ex_duty = map(temperature * 100, MIN_TEMP * 100, MAX_TEMP * 100, MIN_DUTY, MAX_DUTY);
+    fan_ex_duty = constrain(fan_ex_duty, MIN_DUTY, MAX_DUTY); // Make sure that we are not going under or over max duty cycle value
     fan_ex_duty -= (DIF_DUTY * fan_ex_duty / 100);
     analogWrite(FAN_IN_PIN, fan_in_duty);
     analogWrite(FAN_EX_PIN, fan_ex_duty);
   }
-
-  fanInRPM = calculateRPM(lastInRPMmillis, inPulses);
-  fanExRPM = calculateRPM(lastExRPMmillis, exPulses);
-
-  displayInfo();
-  sendToInfluxdb();
-  delay(5000);
 }
 
 void displayInfo() {
@@ -121,12 +141,12 @@ void displayInfo() {
 
   display.setCursor(0, 33);
   int fan_in_load = (fan_in_duty  * 100 / MAX_DUTY); // Intake fan speed percentage
-  sprintf(buffer, "IN %i %i", fan_in_load, fanInRPM);
+  sprintf(buffer, "> %i %i", fan_in_load, fanInRPM);
   display.println(buffer);
 
   display.setCursor(0, 49);
   int fan_ex_load = (fan_ex_duty  * 100 / MAX_DUTY); // Exhaust fan speed percentage
-  sprintf(buffer, "EX %i %i", fan_ex_load, fanExRPM);
+  sprintf(buffer, "< %i %i", fan_ex_load, fanExRPM);
   display.println(buffer);
 
   display.display();
