@@ -20,3 +20,5 @@ const String nodeName = "Fanitizer";            // Hostname used for WiFi, OTA, 
 
 const char* ssid = "WiFi_SSID";					// WiFi SSID
 const char* password = "************";			// WiFi password
+
+const char* otaPassword = "veryStrongPass";     // Password for OTA updates

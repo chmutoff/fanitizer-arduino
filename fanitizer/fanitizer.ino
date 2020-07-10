@@ -85,8 +85,6 @@ void setup() {
   }
   displayStatus = DISPLAY_OK;
 
-  InitOTA();
-
   environmentTimer->setOnTimer(&adjustPWM);
   environmentTimer->Start();
 
@@ -100,7 +98,8 @@ void setup() {
   influxTimer->Start();
 
   showSplashScreen();
-  connectToWiFi(); // TODO: possible check if we are connected before sending data so we don't stuck with bad wifi
+  connectToWiFi();
+  InitOTA();
 }
 
 void loop() {
