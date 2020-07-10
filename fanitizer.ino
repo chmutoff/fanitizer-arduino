@@ -1,4 +1,3 @@
-#include <SPI.h>
 #include <Wire.h>
 #include <WiFiUdp.h>
 #include <Adafruit_BME280.h>
@@ -11,9 +10,15 @@
 #include "OTA.hpp"
 #include "TimerObject.h"
 
+#define __DEBUG__
+#define DISPLAY_OK 1
+#define DISPLAY_NOT_PRESENT 2
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_BME280 bme;
 WiFiUDP udp;
+
+int displayStatus;
 
 float temperature;        // Temperature read from sensor
 float humidity;           // Humidity read from sensor
@@ -58,7 +63,6 @@ int getRPM(volatile int &pulses) {
 
 void setup() {
   Serial.begin(115200);
-  delay(100);
 
   // Initialize temperature sensor
   bme.begin(0x76);
@@ -75,9 +79,11 @@ void setup() {
 
   // Initialize display  
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;); // Don't proceed, loop forever
+    Serial.println("SSD1306 allocation failed");
+    displayStatus = DISPLAY_NOT_PRESENT;
+    // Keep going, we got other stuff to do...
   }
+  displayStatus = DISPLAY_OK;
 
   InitOTA();
 
@@ -121,6 +127,10 @@ void adjustPWM() {
 }
 
 void displayInfo() {
+  if (displayStatus != DISPLAY_OK) {
+    return;
+  }
+
   char buffer[10];  
   display.clearDisplay();  
   display.setTextColor(SSD1306_WHITE);
@@ -151,8 +161,11 @@ void displayInfo() {
 }
 
 void sendToInfluxdb() {
-  String line = String("environment,host=" + String(nodeName) + " temperature=" + String(temperature) + ",humidity=" + String(humidity) + ",inRPM=" + String(fanInRPM) + ",exRPM=" + String(fanExRPM));
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
 
+  String line = String("environment,host=" + String(nodeName) + " temperature=" + String(temperature) + ",humidity=" + String(humidity) + ",inRPM=" + String(fanInRPM) + ",exRPM=" + String(fanExRPM));
   Serial.print("Sending line: ");
   Serial.println(line);
 
@@ -162,12 +175,19 @@ void sendToInfluxdb() {
 }
 
 void connectToWiFi() {
-  WiFi.mode(WIFI_STA); // Set ESP8266 mode to act as a Wi-Fi client and attempt to connect with credentials
+  WiFi.hostname(nodeName);
+  WiFi.mode(WIFI_STA); // Set ESP8266 mode to act as a Wi-Fi client and attempt to connect with credentials  
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  // Wait up to 10s to connect to WiFi
+  for (int i=0; i<=10 && WiFi.status() != WL_CONNECTED; i++) {
     Serial.println("WiFi connection failed!");
-    delay(500);
+    delay(1000);
+  }
+
+  // Well, maybe it will connect later, but leave it for now...
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
   }
 
   Serial.print("Connected to ");
