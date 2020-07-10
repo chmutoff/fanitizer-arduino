@@ -16,7 +16,7 @@
 
 const byte influxHost[] = {192, 168, 69, 69};   // Hostname of the server running influxDB
 const int influxPort = 8089;                    // UDP port number of the server running influxDB
-const String nodeName = "NodeName";             // Host tag reported to influxDB
+const String nodeName = "Fanitizer";            // Hostname used for WiFi, OTA, influxDB tags and node identification
 
 const char* ssid = "WiFi_SSID";					// WiFi SSID
 const char* password = "************";			// WiFi password
