@@ -81,9 +81,9 @@ void setup() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
     Serial.println("SSD1306 allocation failed");
     displayStatus = DISPLAY_NOT_PRESENT;
-    // Keep going, we got other stuff to do...
+  } else {
+    displayStatus = DISPLAY_OK;
   }
-  displayStatus = DISPLAY_OK;
 
   environmentTimer->setOnTimer(&adjustPWM);
   environmentTimer->Start();
