@@ -23,3 +23,5 @@ Wiring:
 - I2C
     - SDA: D2
     - SCL: D1
+
+Rename example-config.h to config.h, change it and move to the fanitizer project
